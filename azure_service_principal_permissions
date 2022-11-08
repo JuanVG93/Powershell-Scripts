@@ -1,0 +1,176 @@
+Function Get-AADServicePrincipalInfo {
+	
+	param
+	(
+		[Parameter(Mandatory = $True)] [array]$ServicePrincipalId
+	)
+	
+	try {
+		
+		# App Permissions Array
+		$AppPermissions =@()
+		
+		# Resource App Hash Array
+		$ResourceAppHash = @{}
+		
+		# Loop through each Service Principal
+		ForEach ($ID in $ServicePrincipalId) {
+			
+			# Gather the App Role Assignments for the Service Principle
+			$AppRoleAssignments = Get-AzureADServiceAppRoleAssignedTo -ObjectId $ID
+			
+			# Get the DisplayName of the Service Principle
+			$ServicePrincipalName = (Get-AzureADServicePrincipal -ObjectId $ID).DisplayName
+			
+			# Loop through each App Role Assignment
+			$AppRoleAssignments | ForEach-Object {
+				
+				# Create a RoleAssignment Object
+				$RoleAssignment = $_
+				
+				# Keep track of all the AppRoles found
+				$AppRoles = {}
+				
+				# Check if a Resource App Hash Key contains the ResourceID
+				If ($ResourceAppHash.ContainsKey($RoleAssignment.ResourceId)) {
+					
+					$AppRoles = $ResourceAppHash[$RoleAssignment.ResourceId]
+					
+				}
+				
+				# If no match found previously
+				Else {
+					
+					# Gather the roles from the Service Principals
+					$AppRoles = (Get-AzureADServicePrincipal -ObjectId $RoleAssignment.ResourceId).AppRoles 
+					
+					#Store AppRoles to re-use.
+					#Probably all role assignments use the same resource (Ex: Microsoft Graph).
+					$ResourceAppHash[$RoleAssignment.ResourceId] = $AppRoles
+					
+				}
+				
+				# Gathering which roles are applied
+				$AppliedRole = $AppRoles | Where-Object {
+					
+					($_.Id -eq $RoleAssignment.Id)
+					
+				}
+				
+				# Creating a new array called AppPermissions
+				$AppPermissions += New-Object PSObject -property @{
+					
+					# Need to ensure strings are returned from this array and whitespaces are removed because I have no idea why it wants to ruin my life
+					DisplayName = ($ServicePrincipalName | Out-String).Trim()
+					Roles = ($AppliedRole.Value | Out-String).Trim()
+					Description = ($AppliedRole.Description | Out-String).Trim()
+					ResourceName = ($RoleAssignment.ResourceDisplayName | Out-String).Trim()
+				
+				}
+				
+			}
+			
+			# Filter results of the AppPermissions array to only display resources that have got these permissions which supports wildcard searches
+			$AppPermissions | Where-Object {($_.Roles -in "Mail*", "Contacts*", "MailboxSettings*", "People*", "Files*", "Notes*", "Directory.AccessAsUser.All", "User_Impersonation")}
+			Write-Output $AppPermissions | Select DisplayName, ResourceName, Roles, Description
+			
+		}
+		
+	}
+	
+	catch {
+		
+		Write-Host "`nError Message: " $_.Exception.Message8
+		Write-Host "`nError in Line: " $_.InvocationInfo.Line
+		Write-Host "`nError in Line Number: "$_.InvocationInfo.ScriptLineNumber
+		Write-Host "`nError Item Name: "$_.Exception.ItemName
+		
+	}
+	
+
+}
+
+Function Get-AADServicePrincipalDelegatedAppPermissions {
+	
+	param
+	(
+		[Parameter(Mandatory = $True)] [array]$ServicePrincipalId
+	)
+	
+	try {
+		
+		# DelegatedPermissions array
+		$DelegatedPermissions = @()
+		
+		# Loop through each Service Principal
+		ForEach ($ID in $ServicePrincipalId) {
+			
+			# Gather the Delegated App Permissions for each Service Principal
+			$DelegatedApps =  (Get-AzureADServicePrincipalOAuth2PermissionGrant -ObjectId $ID)
+			
+			# Take note of the DisplayName of each ServicePrincipal
+			$ServicePrincipalName = (Get-AzureADServicePrincipal -ObjectId $ID).DisplayName
+			
+			# Gathering the data returned
+			$DelegatedApps | ForEach-Object {
+				
+				$ServicePrincipalDelegatedApp = $_
+				
+				# Creating a new array called DelegatedPermissions
+				$DelegatedPermissions += New-object PSObject -property @{
+					
+					# Need to ensure strings are returned from this array and whitespaces are removed because I have no idea why it wants to ruin my life
+					DisplayName = ($ServicePrincipalName | Out-String).Trim()
+					ConsentType = ($DelegatedApps.ConsentType | Out-String).Trim()
+					Scope = ($DelegatedApps.Scope | Out-String).Trim()
+					ExpiryTime = ($DelegatedApps.ExpiryTime | Out-String).Trim()
+					
+				}
+			}
+			
+			# Output the results of the DelegatedPermissions array
+			Write-Output $DelegatedPermissions | Select DisplayName, ConsentType, Scope, ExpiryTime
+
+		}
+		
+	}
+	
+	catch {
+		
+		Write-Host "`nError Message: " $_.Exception.Message8
+		Write-Host "`nError in Line: " $_.InvocationInfo.Line
+		Write-Host "`nError in Line Number: "$_.InvocationInfo.ScriptLineNumber
+		Write-Host "`nError Item Name: "$_.Exception.ItemName
+		
+	}
+	
+}
+
+Function Main {
+	
+	Write-Host "[INFO] Caching all Service Principals..." -Foregroundcolor Yellow
+	
+	# Locate all Service Principals that are enabled
+	$ServicePrincipal = Get-AzureADServicePrincipal -All $True | Where-Object {($_.AccountEnabled -eq $True)}
+	
+	# Gather the ObjectId of the Service Principals
+	$ServicePrincipalId = $($ServicePrincipal).ObjectId
+	
+	# Display a count of the Service Principals found
+	Write-Host "[INFO] ($ServicePrincipal).Count Service Principals found" -Foregroundcolor Gray
+	
+	# Gathering the Service Principal information
+	Write-Host "[INFO] Gathering App Permissions..." -Foregroundcolor Yellow
+	Get-AADServicePrincipalInfo -ServicePrincipalId $ServicePrincipalId | Export-Csv "C:\temp\ServicePrincipals.csv" -NoTypeInformation -Encoding UTF8
+	
+	# Calling the Get-AADServicePrincipalDelegatedAppPermissions Function
+	Write-Host "[INFO] Gathering Delegated App Permissions..." -Foregroundcolor Yellow
+	Get-AADServicePrincipalDelegatedAppPermissions -ServicePrincipalId $ServicePrincipalId | Export-Csv "C:\temp\DelegatedPermissions.csv" -NoTypeInformation -Encoding UTF8
+	
+}
+
+# Logging onto Azure AD
+LogonAAD
+Write-Host "Gathering data... Go get a coffee!" -Foregroundcolor Yellow
+Main
+Write-Host "Done!" -Foregroundcolor Green
