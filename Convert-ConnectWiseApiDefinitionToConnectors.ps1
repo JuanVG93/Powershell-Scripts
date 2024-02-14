@@ -169,8 +169,8 @@ Function Convert-APIDefinitionToDataConnectors {
 
                 contact = @{
 
-                    name = "Juan van Genderen"
-                    email = "juan.vangenderen@wavenetuk.com"
+                    name = "Your Name"
+                    email = "changeme@email.com"
 
                 }
 
@@ -318,7 +318,7 @@ Function Main {
     Write-Host "[INFO] This script will convert an OpenAPI Definition into separate OpenAPI files which can be uploaded to Azure as Custom Data Connectors" -ForegroundColor Cyan
 
     Write-Host "[INFO] Running script..." -ForegroundColor Green
-    Convert-APIDefinitionToDataConnectors -apiDefinitionPath "C:\Users\JuanVan-Genderen\Downloads\ConnectWise-PSA-API-OG.json" -dataConnectorPath "C:\Users\JuanVan-Genderen\Documents\Automation\Logic Apps\Data Connectors\ConnectWise PSA"
+    Convert-APIDefinitionToDataConnectors -apiDefinitionPath "path\to\APIDefinition.json" -dataConnectorPath "path\to\dataconnectorpath"
     Write-Host "[INFO] Done!" -ForegroundColor Green
 
 }
